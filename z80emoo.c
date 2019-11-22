@@ -8,6 +8,9 @@
 #include <z80ex.h>
 #include <ctk.h>
 
+#define CPU_MHZ 7.3728
+#define NANOS_PER_CYCLE 136 // 1000 / 7.3728
+
 struct z8mo_buffer_t {
     uint8_t write;
     uint8_t read;
@@ -157,12 +160,13 @@ void* z8mo_cpu_thread_start(void* user_data) {
     struct z8mo_t* z8mo = (struct z8mo_t*)user_data;
     struct timespec ts;
     ts.tv_sec = 0;
-    ts.tv_nsec = 50000000;
+    ts.tv_nsec = NANOS_PER_CYCLE;
     while (1) {
         if (z80ex_doing_halt(z8mo->cpu)) {
             break;
         }
-        z80ex_step(z8mo->cpu);
+        int tstates = z80ex_step(z8mo->cpu);
+        ts.tv_nsec = NANOS_PER_CYCLE * tstates;
         nanosleep(&ts, NULL);
     }
     return NULL;
