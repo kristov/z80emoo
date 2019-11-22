@@ -30,7 +30,7 @@ struct z8mo_t {
     struct z8mo_buffer_t* out;
 };
 
-static int read_queue(struct z8mo_t* z8mo, struct z8mo_buffer_t* buff, int* c) {
+static int read_queue(struct z8mo_buffer_t* buff, int* c) {
     if (buff->write == buff->read) {
         return 0;
     }
@@ -38,7 +38,7 @@ static int read_queue(struct z8mo_t* z8mo, struct z8mo_buffer_t* buff, int* c) {
     return 1;
 }
 
-static uint8_t write_queue(struct z8mo_t* z8mo, struct z8mo_buffer_t* buff, int c) {
+static uint8_t write_queue(struct z8mo_buffer_t* buff, int c) {
     uint8_t write = buff->write;
     write++;
     if (write == buff->read) {
@@ -73,7 +73,7 @@ Z80EX_BYTE z8mo_port_read(Z80EX_CONTEXT *cpu, Z80EX_WORD port, void* user_data) 
     if (port == 0x81) {
         pthread_mutex_lock(&z8mo->in->lock);
         int c = 0;
-        read_queue(z8mo, z8mo->in, &c);
+        read_queue(z8mo->in, &c);
         pthread_mutex_unlock(&z8mo->in->lock);
         return (uint8_t)c;
     }
@@ -85,7 +85,7 @@ void z8mo_port_write(Z80EX_CONTEXT *cpu, Z80EX_WORD port, Z80EX_BYTE value, void
     port &= 0xff;
     if (port == 0x81) {
         pthread_mutex_lock(&z8mo->out->lock);
-        write_queue(z8mo, z8mo->out, (int)value);
+        write_queue(z8mo->out, (int)value);
         pthread_mutex_unlock(&z8mo->out->lock);
     }
 }
@@ -182,17 +182,14 @@ static uint8_t key_event_handler(struct z8mo_t* z8mo, ctk_event_t* event) {
         if (pthread_mutex_trylock(&z8mo->in->lock) != 0) {
             return 1;
         }
-        write_queue(z8mo, z8mo->in, event->key);
+        write_queue(z8mo->in, event->key);
         pthread_mutex_unlock(&z8mo->in->lock);
         z80ex_int(z8mo->cpu);
-        event->ctx->redraw = 1;
     }
     return 1;
 }
 
 static uint8_t draw_event_handler(struct z8mo_t* z8mo, ctk_event_t* event) {
-    uint8_t read = z8mo->in->read;
-    uint8_t write = z8mo->in->write;
     int c;
     uint16_t idx;
     for (uint16_t y = 0; y < event->widget->height; y++) {
@@ -204,10 +201,6 @@ static uint8_t draw_event_handler(struct z8mo_t* z8mo, ctk_event_t* event) {
             }
         }
     }
-    for (uint8_t idx = read; idx < write; idx++) {
-        ctk_addch(event->widget, 5 + idx, 5, CTK_COLOR_WINDOW, z8mo->in->buffer[idx]);
-    }
-    ctk_printf(event->widget, 10, 10, CTK_COLOR_WINDOW, "read: %d, write: %d", read, write);
     return 1;
 }
 
@@ -228,14 +221,14 @@ static uint8_t loop_event_handler(ctk_ctx_t* ctx, void* user_data) {
         return 0;
     }
     int c = 0;
-    while (read_queue(z8mo, z8mo->out, &c)) {
+    while (read_queue(z8mo->out, &c)) {
         if (c == 0) {
             continue;
         }
+        ctx->redraw = 1;
         if (c == 10) {
             z8mo->cur_x = 0;
             z8mo->cur_y++;
-            ctx->redraw = 1;
             continue;
         }
         uint16_t idx = (z8mo->cur_y * z8mo->width) + z8mo->cur_x;
@@ -245,7 +238,6 @@ static uint8_t loop_event_handler(ctk_ctx_t* ctx, void* user_data) {
             z8mo->cur_x = 0;
             z8mo->cur_y++;
         }
-        ctx->redraw = 1;
     }
     pthread_mutex_unlock(&z8mo->out->lock);
     return 1;
