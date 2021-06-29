@@ -1,6 +1,0 @@
-[submodule "ctk"]
-	path = ctk
-	url = https://github.com/kristov/ctk.git
-[submodule "z80ex"]
-	path = z80ex
-	url = https://github.com/lipro/z80ex.git
